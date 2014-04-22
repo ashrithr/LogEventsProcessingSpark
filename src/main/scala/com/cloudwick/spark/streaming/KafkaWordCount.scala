@@ -108,7 +108,7 @@ object KafkaWordCount {
 
     val ssc = new StreamingContext(
       master,
-      "KafkaWordCount",
+      "LogEventsProcessing",
       Seconds(10),
       sparkHome, // SPARK_HOME
       classpath // Throw in all jars for now to get out of ClassNotFound errors
