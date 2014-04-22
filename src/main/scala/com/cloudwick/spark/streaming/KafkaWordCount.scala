@@ -24,7 +24,7 @@ object KafkaWordCount {
         m.group(8).toInt,
         m.group(10)
       )
-    } 
+    }
     else {
       null
     }
@@ -75,6 +75,7 @@ object KafkaWordCount {
     val clientGroup = args(7)
     val sparkHome = args(8)
     val jars = args(9)
+    val executorMemory = args(10)
 
     /*
     val master = "spark://Ashriths-MacBook-Pro.local:7077"
@@ -98,7 +99,8 @@ object KafkaWordCount {
 
     val classpath = jars.split(":").toList
 
-    println(classpath)
+    // environment variables to set on worker nodes.
+    System.setProperty("spark.executor.memory", executorMemory)
 
     val movieDAO = new LogEventDAO(cassandraNodes.split(",").toSeq, cassandraKeySpace)
     movieDAO.createSchema(cassandraRepFactor.toInt)
@@ -109,16 +111,16 @@ object KafkaWordCount {
     val ssc = new StreamingContext(
       master,
       "LogEventsProcessing",
-      Seconds(10),
+      Seconds(2),
       sparkHome, // SPARK_HOME
       classpath // Throw in all jars for now to get out of ClassNotFound errors
     )
 
-    // A stateful operation is one which operates over multiple batches of data. 
-    // This includes all window-based operations and the updateStateByKey 
-    // operation. Since stateful operations have a dependency on previous batches 
-    // of data, they continuously accumulate metadata over time. To clear this 
-    // metadata, streaming supports periodic checkpointing by saving intermediate data to HDFS. 
+    // A stateful operation is one which operates over multiple batches of data.
+    // This includes all window-based operations and the updateStateByKey
+    // operation. Since stateful operations have a dependency on previous batches
+    // of data, they continuously accumulate metadata over time. To clear this
+    // metadata, streaming supports periodic checkpointing by saving intermediate data to HDFS.
     // ssc.checkpoint("checkpoint")
 
     // assign equal threads to process each kafka topic
@@ -134,8 +136,8 @@ object KafkaWordCount {
     ).map(_._2)
 
     val logEvents = events
-                          .flatMap(_.split("\n")) // take each line of DStream
-                          .map(parseLogEvent(_)) // parse that to log event
+                      .flatMap(_.split("\n")) // take each line of DStream
+                      .map(parseLogEvent(_)) // parse that to log event
 
     // Return a count of views per URL seen in each batch
     val pageCounts = logEvents.map(event => event.requestPage).countByValue()
@@ -143,65 +145,44 @@ object KafkaWordCount {
     // Return a count of status code occurances in each batch interval
     val statusCodeCounts = logEvents.map(event => event.responseCode).countByValue()
 
-    // val pairs = words.map(x => (x, 1L))
+    // Return a count of log events per minute
+    val logVolumeCounts = logEvents.map(event => {
+      destDateFormat.format(sourceDateFormat.parse(event.timestamp))
+    }).countByValue()
 
-    // val wordCounts = pairs.reduceByKeyAndWindow(
-    //   _ + _,
-    //   _ - _,
-    //   Minutes(10),
-    //   Seconds(2),
-    //   2 // num of tasks
-    // )
+    // Resolve geolocation & group by country
+    val geolocation = logEvents.map(event => resolveIp(event.ip)).countByValue()
 
     // Update the url visits to cassandra
     pageCounts.foreachRDD(rrd => {
-      if (rrd.count != 0) {
-        println("====================BEGIN=======================")
-        println("\nPopular page views in last 10 seconds (%s total):".format(rrd.count()))
-        rrd.collect().foreach( result => {
-         println("URL: " + result._1 + " | " + "Count: " + result._2)
-         movieDAO.updatePageViews(result._1, result._2.toInt)
-        })
-        println("=====================END========================")
-      }
+      rrd.collect().foreach( result => {
+        movieDAO.updatePageViews(result._1, result._2.toInt)
+        println("PageViewCounter: " + result._2.toInt)
+      })
     })
 
     // Update number of visits per minute to cassandra
-    logEvents.foreachRDD(rrd => {
-      if (rrd.count != 0) {
-        rrd.collect().foreach(event => {
-          movieDAO.updateLogVolumeByMinute(
-            destDateFormat.format(sourceDateFormat.parse(event.timestamp)),
-            1
-          )
-        })
-      }
+    logVolumeCounts.foreachRDD(rrd => {
+      rrd.collect().foreach(result => {
+        movieDAO.updateLogVolumeByMinute(result._1, result._2.toInt)
+        println("LogVolumeByMinCounter: " + result._2.toInt)
+      })
     })
 
     // Count the occurrence of status codes
     statusCodeCounts.foreachRDD(rrd => {
-      if (rrd.count != 0) {
-        rrd.collect().foreach(result => {
-          movieDAO.updateStatusCounter(
-            result._1.toInt,
-            result._2.toInt
-          )
-        })
-      }
+      rrd.collect().foreach(result => {
+        movieDAO.updateStatusCounter(result._1.toInt, result._2.toInt)
+        println("StatusCodeCounter: " + result._2.toInt)
+      })
     })
 
     // Update country stats
-    logEvents.foreachRDD(rrd => {
-      if (rrd.count != 0) {
-        rrd.collect().foreach(event => {
-          val geoLocation = resolveIp(event.ip)
-          movieDAO.updateVisitsByCountry(
-            geoLocation._1,
-            geoLocation._2,
-            1
-          )
-        })
-      }
+    geolocation.foreachRDD(rrd => {
+      rrd.collect().foreach(result => {
+        movieDAO.updateVisitsByCountry(result._1._1, result._1._2, result._2.toInt)
+        println("Location " + result._1 + " Counter: " + result._2)
+      })
     })
 
     ssc.start()

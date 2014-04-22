@@ -1,3 +1,5 @@
+Sample workflow illustrating spark streaming, kafka and cassandra integration.
+
 Start zookeeper server:
 
 ```
@@ -53,5 +55,11 @@ sbt package
 Edit the parameters in `run.sh` as required and then:
 
 ```
-./run.sh
+SCALA_HOME="/opt/scala" ./run.sh
+```
+
+Check the spark consumption:
+
+```
+bin/kafka-run-class.sh kafka.tools.ConsumerOffsetChecker --zkconnect 10.198.65.102:2181,10.198.78.210:2181,10.199.52.90:2181 --group sparkFetcher
 ```
