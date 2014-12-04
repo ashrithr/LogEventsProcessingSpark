@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCALA_VERSION=2.10
-APPLICATION_NAME="sparklogeventsprocessing"
+APPLICATION_NAME="SparkLogEventsProcessing"
 APPLICATION_VERSION=1.0
 MAIN_CLASS="com.cloudwick.spark.streaming.KafkaWordCount"
 SPARK_HOME="/Users/ashrith/BigData/Spark/spark"
@@ -52,8 +52,8 @@ else
 fi
 
 # Build up classpath
-# CLASSPATH+=":$FWDIR/conf"
-CLASSPATH+="$FWDIR/target/scala-${SCALA_VERSION}/${APPLICATION_NAME}_${SCALA_VERSION}-${APPLICATION_VERSION}.jar"
+# CLASSPATH+="$FWDIR/target/scala-${SCALA_VERSION}/${APPLICATION_NAME}_${SCALA_VERSION}-${APPLICATION_VERSION}.jar"
+CLASSPATH+="$FWDIR/target/scala-${SCALA_VERSION}/${APPLICATION_NAME}-assembly-${APPLICATION_VERSION}.jar"
 
 if [ -e "$FWDIR/lib_managed" ]; then
   for jar in `find $FWDIR/lib_managed -name "*.jar"`
@@ -99,6 +99,8 @@ fi
 echo "==================================="
 echo "Intializing spark streaming job ..."
 echo "==================================="
+
+echo "CLASSPATH: ${CLASSPATH} \n"
 
 exec "$RUNNER" -cp "$CLASSPATH" $MAIN_CLASS $EXTRA_ARGS $SPARK_MASTER $KAFKA_TOPICS \
   $NUMBER_OF_THREADS $ZK_QUORUM $CASSANDRA_NODES $CASSANDRA_KEYSPACE \

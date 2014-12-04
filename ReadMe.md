@@ -1,65 +1,107 @@
-Sample workflow illustrating spark streaming, kafka and cassandra integration.
+## Sample workflow illustrating spark streaming, kafka and cassandra integration.
 
-Start zookeeper server:
+**Pre-Requisites**:
 
-```
-${KAFKA_HOME}/bin/zookeeper-server-start.sh config/zookeeper.properties
-```
+ * git
+ * sbt
+ * scala
+ * [kafka](https://kafka.apache.org)
+ * [spark](https://spark.apache.org)
+ * [cassandra](https://cassandra.apache.org)
 
-Start kafka broker:
-
-```
-${KAFKA_HOME}/bin/kafka-server-start.sh config/server.properties
-```
-
-Create a kafka topic (with retention period of 60 minutes):
+1. Get the source and build a package for spark streaming job
 
 ```
-${KAFKA_HOME}/bin/kafka-topics.sh --zookeeper localhost:2181 --create --topic apache \
-    --partitions 3 --replication-factor 3 \
-    --config flush.message=1 --config retention.ms=60
+cd /opt/
+git clone https://github.com/ashrithr/LogEventsProcessingSpark.git
+cd LogEventsProcessingSpark
+sbt package
+```
+
+2. To emulate real time log events, we are going to use an application called as [generator](https://github.com/cloudwicklabs/generator)
+
+```
+cd /opt/
+git clone https://github.com/cloudwicklabs/generator.git
+cd generator
+sbt assembly
+```
+
+3. Start an instance of zookeeper server, which is required by kafka:
+
+```
+cd ${KAFKA_HOME}
+bin/zookeeper-server-start.sh config/zookeeper.properties
+```
+
+> Replace ${KAFKA_HOME} with path where you have installed kafka
+
+4. Start an instance of kafka broker:
+
+```
+cd ${KAFKA_HOME}
+bin/kafka-server-start.sh config/server.properties
+```
+
+> Replace ${KAFKA_HOME} with path where you have installed kafka
+
+5. Create a kafka topic (with retention period of 60 minutes):
+
+```
+cd ${KAFKA_HOME}
+bin/kafka-topics.sh --zookeeper localhost:2181 --create --topic apache \
+    --partitions 2 --replication-factor 1 \
+    --config flush.messages=1 --config retention.ms=60
 ```
 more options: [here](http://kafka.apache.org/documentation.html#topic-config)
 
-Start spark server:
+> Replace ${KAFKA_HOME} with path where you have installed kafka. Also, change the replication factor
+> and number of partitions based on how many kafka brokers you have
+
+6. Start an instance of spark server:
 
 ```
 ${SPARK_HOME}/sbin/start-master.sh
 ```
 
-Start a worker locally:
+> Replace ${SPARK_HOME} with path where you have installed spark
+
+7. Start an instance of worker locally:
 
 ```
 ${SPARK_HOME}/sbin/start-slave.sh Worker ${SPARK_URL}
 ```
-where, SPARK_URL="spark://Ashriths-MacBook-Pro.local:7077"
 
-Start a cassandra instance:
+> where, `SPARK_URL="spark://Ashriths-MacBook-Pro.local:7077"`, replace that with your instance of
+> spark server
+
+8. Start an instance of cassandra in foreground, if you already have a cassandra instance ignore this step:
 
 ```
 ${CASSANDRA_HOME}/bin/cassandra -f
 ```
 
-Start the generator:
+9. Start the generator, which will simulate log events and writes it to kafka directly:
 
 ```
-${GENERATOR_HOME}/bin/generator log --eventsPerSec 1 --outputFormat text --destination kafka --kafkaBrokerList "localhost:9092" --flushBatch 1 --kafkaTopicName apache
+cd /opt/generator
+bin/generator log --eventsPerSec 1 --outputFormat text --destination kafka \
+    --kafkaBrokerList "localhost:9092" --flushBatch 1 --kafkaTopicName apache
 ```
 
-Start Spark streaming application:
+Finally, start Spark streaming application:
 
-```
-sbt package
-```
-
-Edit the parameters in `run.sh` as required and then:
+> Make sure to edit the parameters in `run.sh` as required to match your environment
 
 ```
 SCALA_HOME="/opt/scala" ./run.sh
 ```
 
-Check the spark consumption:
+You could check the spark consumption from kafka to make sure spark is reading events from kafka:
 
 ```
-bin/kafka-run-class.sh kafka.tools.ConsumerOffsetChecker --zkconnect 10.198.65.102:2181,10.198.78.210:2181,10.199.52.90:2181 --group sparkFetcher
+cd ${KAFKA_HOME}
+bin/kafka-run-class.sh kafka.tools.ConsumerOffsetChecker \
+   --zkconnect localhost:2181 \
+   --group sparkFetcher
 ```

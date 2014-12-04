@@ -1,10 +1,12 @@
 package com.cloudwick.spark.streaming
 
+import java.io.{BufferedReader, IOException, InputStreamReader}
+import java.net.{MalformedURLException, URL, URLConnection}
+
 import com.cloudwick.cassandra.dao.LogEventDAO
-import java.net.{URLConnection, MalformedURLException, URL}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.kafka._
-import java.io.{IOException, InputStreamReader, BufferedReader, File}
+
 import scala.collection.JavaConversions._
 import scala.util.parsing.json.JSON
 
@@ -15,19 +17,10 @@ object KafkaWordCount {
   def parseLogEvent(event: String): LogEvent = {
     val LogPattern = """^([\d.]+) (\S+) (\S+) \[(.*)\] \"([^\s]+) (/[^\s]*) HTTP/[^\s]+\" (\d{3}) (\d+) \"([^\"]+)\" \"([^\"]+)\"$""".r
     val m = LogPattern.findAllIn(event)
-    if (!m.isEmpty) {
-      new LogEvent(
-        m.group(1),
-        m.group(4),
-        m.group(6),
-        m.group(7).toInt,
-        m.group(8).toInt,
-        m.group(10)
-      )
-    }
-    else {
+    if (m.nonEmpty)
+      new LogEvent(m.group(1), m.group(4), m.group(6), m.group(7).toInt, m.group(8).toInt, m.group(10))
+    else
       null
-    }
   }
 
   def resolveIp(ip: String): (String, String) = {
@@ -45,11 +38,11 @@ object KafkaWordCount {
       }
     } catch {
       case e: MalformedURLException => {
-        println("exeception caught: " + e.printStackTrace())
+        println("Exception caught: " + e.printStackTrace())
         (null, null)
       }
       case e: IOException => {
-        println("exeception caught: " + e.printStackTrace())
+        println("Exception caught: " + e.printStackTrace())
         (null, null)
       }
     } finally {
@@ -116,12 +109,14 @@ object KafkaWordCount {
       classpath // Throw in all jars for now to get out of ClassNotFound errors
     )
 
-    // A stateful operation is one which operates over multiple batches of data.
-    // This includes all window-based operations and the updateStateByKey
-    // operation. Since stateful operations have a dependency on previous batches
-    // of data, they continuously accumulate metadata over time. To clear this
-    // metadata, streaming supports periodic checkpointing by saving intermediate data to HDFS.
-    // ssc.checkpoint("checkpoint")
+    /*
+     * A stateful operation is one which operates over multiple batches of data.
+     * This includes all window-based operations and the updateStateByKey
+     * operation. Since stateful operations have a dependency on previous batches
+     * of data, they continuously accumulate metadata over time. To clear this
+     * metadata, streaming supports periodic check-pointing by saving intermediate data to HDFS.
+     * ssc.checkpoint("checkpoint")
+     */
 
     // assign equal threads to process each kafka topic
     val topicMap = topics.split(",").map((_, numThreads.toInt)).toMap
@@ -137,7 +132,7 @@ object KafkaWordCount {
 
     val logEvents = events
                       .flatMap(_.split("\n")) // take each line of DStream
-                      .map(parseLogEvent(_)) // parse that to log event
+                      .map(parseLogEvent) // parse that to log event
 
     // Return a count of views per URL seen in each batch
     val pageCounts = logEvents.map(event => event.requestPage).countByValue()
