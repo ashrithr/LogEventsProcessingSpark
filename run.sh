@@ -87,7 +87,7 @@ if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
 else
   CLASSPATH+=":$SCALA_LIBRARY_PATH/scala-library.jar"
   CLASSPATH+=":$SCALA_LIBRARY_PATH/scala-compiler.jar"
-  CLASSPATH+=":$SCALA_LIBRARY_PATH/jline.jar"
+  # CLASSPATH+=":$SCALA_LIBRARY_PATH/jline.jar"
   # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
   EXTRA_ARGS="$JAVA_OPTS"
 fi
@@ -100,7 +100,8 @@ echo "==================================="
 echo "Intializing spark streaming job ..."
 echo "==================================="
 
-echo "CLASSPATH: ${CLASSPATH} \n"
+echo "CLASSPATH: ${CLASSPATH}"
+echo ""
 
 exec "$RUNNER" -cp "$CLASSPATH" $MAIN_CLASS $EXTRA_ARGS $SPARK_MASTER $KAFKA_TOPICS \
   $NUMBER_OF_THREADS $ZK_QUORUM $CASSANDRA_NODES $CASSANDRA_KEYSPACE \
