@@ -1,6 +1,6 @@
 .idea
 .idea_modules
 checkpoint
-project
+project/target
 target
 spark.log
